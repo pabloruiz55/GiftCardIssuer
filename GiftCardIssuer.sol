@@ -1,6 +1,6 @@
 pragma solidity 0.4.19;
 
-contract GiftCardManager {
+contract GiftCardIssuer {
     
     struct Card {
         uint value;
@@ -9,6 +9,7 @@ contract GiftCardManager {
         address beneficiary;
         address generatedBy;
         bool rechargeable;
+        bool transfereable;
     }
     
     address owner;
@@ -22,13 +23,15 @@ contract GiftCardManager {
     bool public rule_Rechargeable = false;
     uint public rule_MinValue = 1 wei;
     uint public rule_MaxValue = 100 ether;
+    bool public rule_Transfereable = true;
     
-    function GiftCardManager() public {
+    function GiftCardIssuer() public {
         owner = msg.sender;
     }
     
     function setGiftCardRules(
         bool _rechargeable,
+        bool _transfereable,
         uint _duration,
         uint _minValue,
         uint _maxValue
@@ -36,6 +39,7 @@ contract GiftCardManager {
         require(msg.sender == owner);
         
         rule_Rechargeable = _rechargeable;
+        rule_Transfereable = _transfereable;
         rule_Duration = _duration;
         rule_MinValue = _minValue;
         rule_MaxValue = _maxValue;
@@ -53,6 +57,7 @@ contract GiftCardManager {
         cards[_id].issueDate = now;
         cards[_id].validThru = now + rule_Duration;
         cards[_id].rechargeable = rule_Rechargeable;
+        cards[_id].transfereable = rule_Transfereable;
         
         // add value to merchant balance
         merchantBalance += msg.value;
@@ -60,6 +65,7 @@ contract GiftCardManager {
     
     function transferGiftCardTo(bytes32 _id, address _newBeneficiary) public {
         require(msg.sender == cards[_id].beneficiary);
+        require(cards[_id].transfereable);
         require(_newBeneficiary != address(0));
         
         cards[_id].beneficiary = _newBeneficiary;
@@ -108,7 +114,7 @@ contract GiftCardManager {
     }
 }
 
-contract Store is GiftCardManager {
+contract Store is GiftCardIssuer {
     
     uint itemPrice = 1 ether;
     
@@ -125,7 +131,5 @@ contract Store is GiftCardManager {
         require(msg.value == itemPrice);
         
         itemsBought[msg.sender]++;
-    }
-    
-    
+    }   
 }
