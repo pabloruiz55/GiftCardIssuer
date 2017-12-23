@@ -54,6 +54,9 @@ contract GiftCardIssuer {
         uint _maxValue
         ) public {
         require(msg.sender == owner);
+        require(duration >= 1 days);
+        require(_minValue > 0);
+        require(_maxValue >= _minValue);
         
         rule_Rechargeable = _rechargeable;
         rule_Transfereable = _transfereable;
@@ -73,7 +76,7 @@ contract GiftCardIssuer {
         require(msg.value >= rule_MinValue);
         require(msg.value <= rule_MaxValue);
         
-        cards[_cardId].value = msg.value; // TBD FEES
+        cards[_cardId].value = msg.value;
         cards[_cardId].beneficiary = _beneficiary;
         cards[_cardId].generatedBy = msg.sender;
         cards[_cardId].issueDate = now;
@@ -94,6 +97,7 @@ contract GiftCardIssuer {
      */
     function transferGiftCardTo(bytes32 _cardId, address _newBeneficiary) public {
         require(msg.sender == cards[_cardId].beneficiary);
+        require(cards[_cardId].issueDate > 0);
         require(cards[_cardId].transfereable);
         require(_newBeneficiary != address(0));
         
@@ -174,5 +178,5 @@ contract Store is GiftCardIssuer {
         require(msg.value == itemPrice);
         
         itemsBought[msg.sender]++;
-    }   
+    }
 }
