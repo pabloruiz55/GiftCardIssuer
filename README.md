@@ -1,4 +1,4 @@
-# GiftCardManager (WIP)
+# GiftCardIssuer (WIP)
 A smart contract that allows issuing and accepting gift card payments
 
 This is a work in progress.
