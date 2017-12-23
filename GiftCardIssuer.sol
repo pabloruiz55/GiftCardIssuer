@@ -1,5 +1,9 @@
 pragma solidity 0.4.19;
 
+/**
+ * @author Pablo Ruiz <me@pabloruiz.co>
+ * @title GiftCardIssuer - A Gift Card contract to issue and accept gift cards
+ */ 
 contract GiftCardIssuer {
     
     struct Card {
@@ -16,19 +20,32 @@ contract GiftCardIssuer {
     
     mapping (bytes32 => Card) public cards;
     
-    uint public merchantBalance;
+    // Keeps track of the ether balance 
+    uint public balance;
     
-    // Card rules variables
+    // Card business rules variables
     uint public rule_Duration = 365 days;
     bool public rule_Rechargeable = false;
     uint public rule_MinValue = 1 wei;
     uint public rule_MaxValue = 100 ether;
     bool public rule_Transfereable = true;
     
+    event E_GiftCardUsed(bytes32 _cardId, uint _dateOfUse, address _usedBy, uint _prodPrice);
+    event E_GiftCardIssued(bytes32 _cardId, uint _dateOfIssue, address _issuer, address _beneficiary, uint _value);
+
+    
     function GiftCardIssuer() public {
         owner = msg.sender;
     }
     
+    /**
+     * @dev modifies the business rules of newly issued gift cards
+     * @param _rechargeable whether or not the gift car can be recharged
+     * @param _transfereable whether or not the gift card can be transferred
+     * @param _duration is how long the gift card lasts
+     * @param _minValue is the minimum ether that has to be sent in order to issue the card
+     * @param _maxValue is the maximum ether that can be sent in order to issue the card
+     */
     function setGiftCardRules(
         bool _rechargeable,
         bool _transfereable,
@@ -45,71 +62,97 @@ contract GiftCardIssuer {
         rule_MaxValue = _maxValue;
     }
     
-    function generateGiftCard(bytes32 _id, address _beneficiary) public payable {
+    /**
+     * @dev issues a new gift card with the business rules set.
+     * @param _cardId is the id that the issuer wants to set for the card (must be unique)
+     * @param _beneficiary is the account that will be able to use the cards
+     */
+    function issueGiftCard(bytes32 _cardId, address _beneficiary) public payable {
         require(msg.value > 0);
-        require(cards[_id].issueDate > 0);
+        require(cards[_cardId].issueDate == 0);
         require(msg.value >= rule_MinValue);
         require(msg.value <= rule_MaxValue);
         
-        cards[_id].value = msg.value; // TBD FEES
-        cards[_id].beneficiary = _beneficiary;
-        cards[_id].generatedBy = msg.sender;
-        cards[_id].issueDate = now;
-        cards[_id].validThru = now + rule_Duration;
-        cards[_id].rechargeable = rule_Rechargeable;
-        cards[_id].transfereable = rule_Transfereable;
+        cards[_cardId].value = msg.value; // TBD FEES
+        cards[_cardId].beneficiary = _beneficiary;
+        cards[_cardId].generatedBy = msg.sender;
+        cards[_cardId].issueDate = now;
+        cards[_cardId].validThru = now + rule_Duration;
+        cards[_cardId].rechargeable = rule_Rechargeable;
+        cards[_cardId].transfereable = rule_Transfereable;
         
         // add value to merchant balance
-        merchantBalance += msg.value;
+        balance += msg.value;
+        
+        E_GiftCardIssued(_cardId, now, msg.sender, _beneficiary,msg.value);
     }
     
-    function transferGiftCardTo(bytes32 _id, address _newBeneficiary) public {
-        require(msg.sender == cards[_id].beneficiary);
-        require(cards[_id].transfereable);
+    /**
+     * @dev transfers the gift card to another beneficiary if allowd by business rules
+     * @param _cardId is the id of the card
+     * @param _newBeneficiary is the new beneficary of the card 
+     */
+    function transferGiftCardTo(bytes32 _cardId, address _newBeneficiary) public {
+        require(msg.sender == cards[_cardId].beneficiary);
+        require(cards[_cardId].transfereable);
         require(_newBeneficiary != address(0));
         
-        cards[_id].beneficiary = _newBeneficiary;
+        cards[_cardId].beneficiary = _newBeneficiary;
     }
     
-    function addFundsToGiftCard(bytes32 _id) public payable{
+    /** @dev adds funds to the gift card if the business rules allow it 
+     * @param _cardId is the id of the card 
+     */
+    function addFundsToGiftCard(bytes32 _cardId) public payable{
+        require(cards[_cardId].rechargeable);
         require(msg.value > 0);
-        require(cards[_id].issueDate > 0);
+        require(cards[_cardId].issueDate > 0);
         require(msg.value >= rule_MinValue);
         require(msg.value <= rule_MaxValue);
         
-        cards[_id].value += msg.value; // TBD FEES
-        cards[_id].validThru = now + rule_Duration; //Extend duration
+        cards[_cardId].value += msg.value;
+        cards[_cardId].validThru = now + rule_Duration; //Extend duration
         
         // add value to merchant balance
-        merchantBalance += msg.value;
+        balance += msg.value;
     }
     
-    function useGiftCard(bytes32 _id, uint _prodPrice) public returns (bool){
+    /**
+     * @dev uses the gift card and substracts the corresponding balance from it to pay for a product
+     * @param _cardId is the id of the card 
+     * @param _prodPrice is the price of the product being purchased (how much balance will be substracted from the card)
+     */
+    function useGiftCard(bytes32 _cardId, uint _prodPrice) public returns (bool){
         
         // Gift card can only be used by the account it was issued to
-        require(msg.sender == cards[_id].beneficiary);
+        require(msg.sender == cards[_cardId].beneficiary);
         
         // card must exist
-        require(cards[_id].issueDate > 0);
+        require(cards[_cardId].issueDate > 0);
         
         // Card must not have expired
-        require(now <= cards[_id].validThru);
+        require(now <= cards[_cardId].validThru);
         
         // Card should have enough funds to cover the purchase
-        require(cards[_id].value >= _prodPrice);
+        require(cards[_cardId].value >= _prodPrice);
         
         // remove value from card balance
-        cards[_id].value -= _prodPrice;
+        cards[_cardId].value -= _prodPrice;
+        
+        E_GiftCardUsed(_cardId, now, cards[_cardId].beneficiary, _prodPrice);
     
         return (true);
-        
     }
     
+    /**
+     * @dev allows the owner of the contract to withdraw the funds sent to it 
+     * when gift cards are purchased 
+     */
     function withdrawMerchantBalance() public {
         require(msg.sender == owner);
         
-        uint fundToWithdraw = merchantBalance;
-        merchantBalance = 0;
+        uint fundToWithdraw = balance;
+        balance = 0;
         owner.transfer(fundToWithdraw);
     }
 }
