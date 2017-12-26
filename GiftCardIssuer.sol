@@ -54,7 +54,7 @@ contract GiftCardIssuer {
         uint _maxValue
         ) public {
         require(msg.sender == owner);
-        require(duration >= 1 days);
+        require(_duration >= 1 days);
         require(_minValue > 0);
         require(_maxValue >= _minValue);
         
